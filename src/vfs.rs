@@ -5,10 +5,12 @@ use derive_more::Display;
 
 pub type FSMountFunc = fn(&str) -> (FSRef, DentryRef);
 pub type FSRef = Arc<dyn FileSystem>;
-pub type DentryRef = Arc<RwLock<Dentry>>;
-pub type INodeRef = Arc<dyn INode>;
 pub type FSWeakRef = Weak<dyn FileSystem>;
+
+pub type DentryRef = Arc<RwLock<Dentry>>;
 pub type DentryWeakRef = Weak<RwLock<Dentry>>;
+
+pub type INodeRef = Arc<dyn INode>;
 pub type INodeWeakRef = Weak<dyn INode>;
 
 #[derive(Debug, Display, PartialEq, Clone, Eq, Ord, PartialOrd, Copy)]
@@ -22,6 +24,7 @@ pub struct RegisteredFS {
     root_dentry: Option<DentryRef>,
 }
 
+#[allow(unused_must_use)]
 impl fmt::Display for RegisteredFS {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "RegisteredFS info: \n");
@@ -152,12 +155,25 @@ impl RegisteredFS {
     pub fn vfs_mkdir(&mut self, path: &str) -> Result<DentryRef> {
         let mut nd = self.path_lookup(path, LookupFlag::LOOKUP_PARENT)?;
         let parent = nd.current.clone();
-        if nd.cur_ind >= nd.paths.len() /* `/` */ || self.lookup_last(&mut nd, LookupFlag::empty()).is_ok()
-        {
+        /* if path equals to `/` or the target exist */
+        if nd.cur_ind >= nd.paths.len() || self.lookup_last(&mut nd, LookupFlag::empty()).is_ok() {
             Err(Error::new(EEXIST))
         } else {
             let parent_inode = parent.read().get_inode()?;
             parent_inode.mkdir(&parent, nd.paths[nd.cur_ind], 0)
+        }
+    }
+    pub fn vfs_create(&mut self, path: &str) -> Result<DentryRef> {
+        if path.ends_with("/") {
+            return Err(Error::new(EISDIR));
+        }
+        let mut nd = self.path_lookup(path, LookupFlag::LOOKUP_PARENT)?;
+        let parent = nd.current.clone();
+        if self.lookup_last(&mut nd, LookupFlag::empty()).is_ok() {
+            Err(Error::new(EEXIST))
+        } else {
+            let parent_inode = parent.read().get_inode()?;
+            parent_inode.create(&parent, nd.paths[nd.cur_ind], 0)
         }
     }
 }
@@ -242,11 +258,12 @@ pub trait INode: Sync + Send {
     //     int (*permission) (struct inode *, int);
     //     struct posix_acl * (*get_acl)(struct inode *, int);
     //     int (*readlink) (struct dentry *, char __user *,int);
+    fn create(&self, dir: &DentryRef, name: &str, flag: usize) -> Result<DentryRef>;
     //     int (*create) (struct inode *,struct dentry *, umode_t, bool);
     //     int (*link) (struct dentry *,struct inode *,struct dentry *);
     //     int (*unlink) (struct inode *,struct dentry *);
     //     int (*symlink) (struct inode *,struct dentry *,const char *);
-    fn mkdir(&self, dir: &DentryRef, name: &str, _: usize) -> Result<DentryRef>;
+    fn mkdir(&self, dir: &DentryRef, name: &str, flag: usize) -> Result<DentryRef>;
     //     int (*mkdir) (struct inode *,struct dentry *,umode_t);
     //     int (*rmdir) (struct inode *,struct dentry *);
     //     int (*mknod) (struct inode *,struct dentry *,umode_t,dev_t);

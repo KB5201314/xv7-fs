@@ -132,16 +132,17 @@ impl RamFSINodeLocked {
         let data = fs.data.get(&ino).unwrap();
         data.clone()
     }
-    fn get_node_data_mut(&self) -> NodeData {
-        let fs = self.get_fs_special();
-        let fs = fs.0.read();
-        let ino = self.0.read().ino;
-        let data = fs.data.get(&ino).unwrap();
-        data.clone()
-    }
+    // fn get_node_data_mut(&self) -> NodeData {
+    //     let fs = self.get_fs_special();
+    //     let fs = fs.0.read();
+    //     let ino = self.0.read().ino;
+    //     let data = fs.data.get(&ino).unwrap();
+    //     data.clone()
+    // }
     fn get_fs_special(&self) -> Arc<RamFSLocked> {
         return self.0.read().fs.upgrade().unwrap();
     }
+
     fn create_dentry(
         &self,
         self_ref: &Arc<RamFSINodeLocked>,
@@ -170,6 +171,27 @@ impl RamFSINodeLocked {
 
         return dentry;
     }
+
+    fn create_entity(&self, dir: &DentryRef, name: &str, _: usize, mode:INodeType) -> Result<DentryRef> {
+        let fs = self.get_fs_special();
+        let inode = fs
+            .alloc_inode(
+                &fs,
+                Some(INodeMetaData {
+                    mode: mode,
+                    ..Default::default()
+                }),
+            )
+            .unwrap();
+        fs.link_inode(
+            &dir.read().inode.upgrade().unwrap(),
+            &{ inode.clone() },
+            name,
+        );
+        let dentry = inode.create_dentry(&inode, Some(dir.clone()), name);
+        Ok(dentry)
+    }
+
 }
 impl INode for RamFSINodeLocked {
     fn get_metadata(&self) -> INodeMetaData {
@@ -202,23 +224,14 @@ impl INode for RamFSINodeLocked {
             None => Err(Error::new(ENOENT)),
         }
     }
-    fn mkdir(&self, dir: &DentryRef, name: &str, _: usize) -> Result<DentryRef> {
-        let fs = self.get_fs_special();
-        let inode = fs
-            .alloc_inode(
-                &fs,
-                Some(INodeMetaData {
-                    mode: INodeType::IFDIR,
-                    ..Default::default()
-                }),
-            )
-            .unwrap();
-        fs.link_inode(
-            &dir.read().inode.upgrade().unwrap(),
-            &{ inode.clone() },
-            name,
-        );
-        let dentry = inode.create_dentry(&inode, Some(dir.clone()), name);
-        Ok(dentry)
+
+    fn mkdir(&self, dir: &DentryRef, name: &str, flag: usize) -> Result<DentryRef> {
+        self.create_entity(dir, name, flag, INodeType::IFDIR)
     }
+
+    fn create(&self, dir: &DentryRef, name: &str, flag: usize) -> Result<DentryRef> {
+        self.create_entity(dir, name, flag, INodeType::IFREG)
+    }
+
+
 }
