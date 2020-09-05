@@ -18,41 +18,71 @@ use usyscall::error::*;
 use vfs::*;
 use Option::*;
 
-fn main() {
-    REGISTERED_FS
-        .lock()
-        .register_fs(FSType::RAMFS, ramfs::RamFS::mount);
-    let (_rootfs, root_dentry) = REGISTERED_FS.lock().mount_fs(FSType::RAMFS, "".into());
-
-    REGISTERED_FS.lock().set_root(&root_dentry);
-    println!("[REGISTERED_FS]: {}", *REGISTERED_FS.lock());
-    println!("[root]: {}", *REGISTERED_FS.lock().get_root().read());
-    test_vfs_lookup("/");
-    test_vfs_mkdir("/abc");
-    test_vfs_mkdir("/abc/test_dir");
-    test_vfs_mkdir("/abc/test_dir2");
-    test_vfs_lookup("/");
-    test_vfs_lookup("/abc"); // Error
-    test_vfs_lookup("/abc/test_dir");
-    test_vfs_lookup("/abc/test_dir2");
-}
-
-fn test_vfs_lookup(path: &str) {
-    println!(
-        "[vfs_lookup ({})]: {}",
-        path,
-        *REGISTERED_FS.lock().vfs_lookup(path).unwrap().read()
-    );
-}
-
-fn test_vfs_mkdir(path: &str) {
-    println!(
-        "[vfs_mkdir ({})]: {}",
-        path,
-        *REGISTERED_FS.lock().vfs_mkdir(path).unwrap().read()
-    );
-}
-
 lazy_static! {
     pub static ref REGISTERED_FS: Mutex<vfs::RegisteredFS> = Mutex::new(RegisteredFS::new());
+}
+
+fn main() {
+    println!("run `cargo test` instead");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[allow(unused_must_use)]
+    #[test]
+    fn test() {
+        REGISTERED_FS
+            .lock()
+            .register_fs(FSType::RAMFS, ramfs::RamFS::mount);
+        let (_rootfs, root_dentry) = REGISTERED_FS.lock().mount_fs(FSType::RAMFS, "".into());
+
+        REGISTERED_FS.lock().set_root(&root_dentry);
+        println!("[REGISTERED_FS]: {}", *REGISTERED_FS.lock());
+        println!("[root]: {}", *REGISTERED_FS.lock().get_root().read());
+        assert_eq!(test_vfs_lookup("/"), Ok(()));
+        assert_eq!(test_vfs_mkdir("/"), Err(Error::new(EEXIST)));
+        assert_eq!(test_vfs_mkdir("/abc/test_dir"), Err(Error::new(ENOENT)));
+        assert_eq!(test_vfs_mkdir("/abc"), Ok(()));
+        assert_eq!(test_vfs_mkdir("/abc/test_dir"), Ok(()));
+        assert_eq!(test_vfs_mkdir("/abc/test_dir2"), Ok(()));
+        assert_eq!(test_vfs_lookup("/"), Ok(()));
+        assert_eq!(test_vfs_lookup("/abc"), Ok(()));
+        assert_eq!(test_vfs_lookup("/abc/test_dir"), Ok(()));
+        assert_eq!(test_vfs_lookup("/abc/test_dir2"), Ok(()));
+        assert_eq!(test_vfs_lookup("/test_file"), Err(Error::new(ENOENT)));
+        assert_eq!(test_vfs_create("/test_file"), Ok(()));
+        assert_eq!(test_vfs_lookup("/test_file"), Ok(()));
+        assert_eq!(test_vfs_create("/"), Err(Error::new(EISDIR)));
+        assert_eq!(test_vfs_create("/dir/"), Err(Error::new(EISDIR)));
+        assert_eq!(test_vfs_create("/test_file"), Err(Error::new(EEXIST)));
+    }
+
+    fn test_vfs_lookup(path: &str) -> Result<()> {
+        println!(
+            "[vfs_lookup ({})]: {}",
+            path,
+            *REGISTERED_FS.lock().vfs_lookup(path)?.read()
+        );
+        Ok(())
+    }
+
+    fn test_vfs_mkdir(path: &str) -> Result<()> {
+        println!(
+            "[vfs_mkdir ({})]: {}",
+            path,
+            *REGISTERED_FS.lock().vfs_mkdir(path)?.read()
+        );
+        Ok(())
+    }
+
+    fn test_vfs_create(path: &str) -> Result<()> {
+        println!(
+            "[vfs_create ({})]: {}",
+            path,
+            *REGISTERED_FS.lock().vfs_create(path)?.read()
+        );
+        Ok(())
+    }
 }
