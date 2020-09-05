@@ -111,6 +111,17 @@ impl RegisteredFS {
 
     fn lookup_last(&mut self, nd: &mut NameIData, flags: LookupFlag) -> Result<()> {
         let dentry = self.lookup_at(nd.paths[nd.cur_ind], &nd.current, flags)?;
+        if flags.contains(LookupFlag::LOOKUP_DIRECTORY) {
+            match dentry.read().inode.upgrade() {
+                Some(inode) => {
+                    if inode.get_metadata().mode != INodeType::IFDIR {
+                        return Err(Error::new(ENOTDIR));
+                    }
+                    Ok(())
+                }
+                None => Err(Error::new(ENOENT)),
+            }?;
+        }
         nd.cur_ind += 1;
         nd.current = dentry.clone();
         return Ok(());
@@ -158,30 +169,32 @@ impl RegisteredFS {
     }
     pub fn vfs_mkdir(&mut self, path: &str) -> Result<DentryRef> {
         let mut nd = self.path_lookup(path, LookupFlag::LOOKUP_PARENT)?;
-        let parent = nd.current.clone();
         /* if path equals to `/` or the target exist */
-        if nd.cur_ind >= nd.paths.len() || self.lookup_last(&mut nd, LookupFlag::empty()).is_ok() {
+        if nd.paths.len() == 0 || self.lookup_last(&mut nd, LookupFlag::empty()).is_ok() {
             Err(Error::new(EEXIST))
         } else {
+            let parent = nd.current.clone();
             let parent_inode = parent.read().get_inode()?;
             parent_inode.mkdir(&parent, nd.paths[nd.cur_ind], 0)
         }
     }
-    pub fn vfs_create(&mut self, path: &str) -> Result<DentryRef> {
-        if path.ends_with("/") {
-            return Err(Error::new(EISDIR));
-        }
+    pub fn vfs_rmdir(&mut self, path: &str) -> Result<()> {
         let mut nd = self.path_lookup(path, LookupFlag::LOOKUP_PARENT)?;
-        let parent = nd.current.clone();
-        if self.lookup_last(&mut nd, LookupFlag::empty()).is_ok() {
-            Err(Error::new(EEXIST))
-        } else {
-            let parent_inode = parent.read().get_inode()?;
-            parent_inode.create(&parent, nd.paths[nd.cur_ind], 0)
+        if nd.paths.len() == 0 {
+            /* if path equals to `/` */
+            return Err(Error::new(EINVAL));
         }
+        let parent = nd.current.clone();
+        self.lookup_last(&mut nd, LookupFlag::LOOKUP_DIRECTORY)?;
+        let current_inode = nd.current.read().get_inode()?;
+        let inodes = current_inode.readdir_inodes(&nd.current, 0)?;
+        if inodes.len() != 0 {
+            return Err(Error::new(ENOTEMPTY));
+        }
+        let parent_inode = parent.read().get_inode()?;
+        parent_inode.rmdir(&parent, nd.paths[nd.cur_ind - 1], &nd.current, 0)
     }
-
-    pub fn vfs_rename(&mut self, path: &str) -> Result<DentryRef> {
+    pub fn vfs_create(&mut self, path: &str) -> Result<DentryRef> {
         if path.ends_with("/") {
             return Err(Error::new(EISDIR));
         }
@@ -236,7 +249,7 @@ struct NameIData<'nd> {
 bitflags! {
 struct LookupFlag:u32 {
     const LOOKUP_FOLLOW = 0b00000001;   // follow link (not currently implemented)
-    const LOOKUP_DIRECTORY = 0b00000010;// search a directory (not currently implemented)
+    const LOOKUP_DIRECTORY = 0b00000010;// search a directory
     const LOOKUP_PARENT = 0b00000100;   // search the parent and ignore the tail
     const LOOKUP_REVAL = 0b00001000;    // search on fs instead of dentry cache
 }
@@ -313,6 +326,7 @@ pub trait INode: Sync + Send {
     //     int (*symlink) (struct inode *,struct dentry *,const char *);
     fn mkdir(&self, dentry: &DentryRef, name: &str, flag: usize) -> Result<DentryRef>;
     //     int (*mkdir) (struct inode *,struct dentry *,umode_t);
+    fn rmdir(&self, dentry: &DentryRef, name: &str, target: &DentryRef, flag: usize) -> Result<()>;
     //     int (*rmdir) (struct inode *,struct dentry *);
     //     int (*mknod) (struct inode *,struct dentry *,umode_t,dev_t);
     // fn rename(&self, dentry: &DentryRef, name: &str, new_name: &str, flag: usize) -> Result<()>;
@@ -374,6 +388,7 @@ pub trait INode: Sync + Send {
     // int (*lseek) (struct inode *, struct file *, off_t, int);
     // int (*read) (struct inode *, struct file *, char *, int);
     // int (*write) (struct inode *, struct file *, const char *, int);
+    fn readdir_inodes(&self, dentry: &DentryRef, flag: usize) -> Result<BTreeMap<String, usize>>;
     // int (*readdir) (struct inode *, struct file *, void *, filldir_t);
     // int (*select) (struct inode *, struct file *, int, select_table *);
     // int (*ioctl) (struct inode *, struct file *, unsigned int, unsigned long);

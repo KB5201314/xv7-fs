@@ -234,8 +234,33 @@ impl INode for RamFSINodeLocked {
         self.create_entity(dentry, name, flag, INodeType::IFDIR)
     }
 
+    fn rmdir(&self, dentry: &DentryRef, name: &str, target: &DentryRef, flag: usize) -> Result<()> {
+        let fs = self.get_fs_special();
+        let mut fsw = fs.0.write();
+        let node_data = fsw
+            .data
+            .get_mut(&self.0.read().ino)
+            .ok_or_else(|| Error::new(ENOENT))?;
+        node_data
+            .children_ino
+            .remove(name)
+            .ok_or_else(|| Error::new(ENOENT))?;
+        dentry.write().subdirs.remove(name);
+        Ok(())
+    }
+
     fn create(&self, dentry: &DentryRef, name: &str, flag: usize) -> Result<DentryRef> {
         self.create_entity(dentry, name, flag, INodeType::IFREG)
+    }
+
+    fn readdir_inodes(&self, dentry: &DentryRef, flag: usize) -> Result<BTreeMap<String, usize>> {
+        let fs = self.get_fs_special();
+        let fsr = fs.0.write();
+        let node_data = fsr
+            .data
+            .get(&self.0.read().ino)
+            .ok_or_else(|| Error::new(ENOENT))?;
+        Ok(node_data.children_ino.clone())
     }
 
     // fn rename(

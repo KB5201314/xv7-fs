@@ -49,6 +49,14 @@ mod tests {
         assert_eq!(test_vfs_mkdir("/abc"), Ok(()));
         assert_eq!(test_vfs_mkdir("/abc/test_dir"), Ok(()));
         assert_eq!(test_vfs_mkdir("/abc/test_dir2"), Ok(()));
+        assert_eq!(test_vfs_mkdir("/abc/test_dir3"), Ok(()));
+
+        // test for vfs_rmdir
+        assert_eq!(test_vfs_rmdir("/"), Err(Error::new(EINVAL)));
+        assert_eq!(test_vfs_rmdir("/abc"), Err(Error::new(ENOTEMPTY)));
+        assert_eq!(test_vfs_rmdir("/abc/"), Err(Error::new(ENOTEMPTY)));
+        assert_eq!(test_vfs_rmdir("/abc/test_dir3"), Ok(()));
+        assert_eq!(test_vfs_rmdir("/abc/test_dir3"), Err(Error::new(ENOENT)));
 
         // test for vfs_lookup
         assert_eq!(test_vfs_lookup("/"), Ok(()));
@@ -63,15 +71,11 @@ mod tests {
         assert_eq!(test_vfs_create("/"), Err(Error::new(EISDIR)));
         assert_eq!(test_vfs_create("/dir/"), Err(Error::new(EISDIR)));
         assert_eq!(test_vfs_create("/test_file"), Err(Error::new(EEXIST)));
-    
         // test for vfs_open
         let file = test_vfs_open("/test_file", FileMode::O_RDWR);
         assert!(file.is_ok());
-        
         // test for vfs_close
         assert_eq!(test_vfs_close(&mut file.unwrap()), Ok(()));
-
-
     }
 
     fn test_vfs_lookup(path: &str) -> Result<()> {
@@ -91,6 +95,11 @@ mod tests {
         );
         Ok(())
     }
+    fn test_vfs_rmdir(path: &str) -> Result<()> {
+        REGISTERED_FS.lock().vfs_rmdir(path)?;
+        println!("[vfs_rmdir ({})]", path,);
+        Ok(())
+    }
 
     fn test_vfs_create(path: &str) -> Result<()> {
         println!(
@@ -100,24 +109,15 @@ mod tests {
         );
         Ok(())
     }
-    
     fn test_vfs_open(path: &str, mode: FileMode) -> Result<FileRef> {
         let file = REGISTERED_FS.lock().vfs_open(path, mode)?;
-        println!(
-            "[vfs_open ({})]: {}",
-            path,
-            *file.read()
-        );
+        println!("[vfs_open ({})]: {}", path, *file.read());
         Ok(file)
     }
 
     fn test_vfs_close(file: &mut FileRef) -> Result<()> {
         REGISTERED_FS.lock().vfs_close(file)?;
-        println!(
-            "[vfs_close ({})]",
-            *file.read()
-        );
+        println!("[vfs_close ({})]", *file.read());
         Ok(())
     }
-    
 }
