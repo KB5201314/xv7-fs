@@ -3,7 +3,6 @@
     - [x] lookup
     - [x] mkdir
     - [x] create
-    - [] rename
     - [] setattr
     - [] getattr
     - [] update_time
@@ -15,6 +14,6 @@
     - [] write
 
 - extra syscall
-    - [] open
-    - [] close
+    - [x] open
+    - [x] close
     

@@ -172,7 +172,13 @@ impl RamFSINodeLocked {
         return dentry;
     }
 
-    fn create_entity(&self, dir: &DentryRef, name: &str, _: usize, mode:INodeType) -> Result<DentryRef> {
+    fn create_entity(
+        &self,
+        dentry: &DentryRef,
+        name: &str,
+        _: usize,
+        mode: INodeType,
+    ) -> Result<DentryRef> {
         let fs = self.get_fs_special();
         let inode = fs
             .alloc_inode(
@@ -184,14 +190,13 @@ impl RamFSINodeLocked {
             )
             .unwrap();
         fs.link_inode(
-            &dir.read().inode.upgrade().unwrap(),
+            &dentry.read().inode.upgrade().unwrap(),
             &{ inode.clone() },
             name,
         );
-        let dentry = inode.create_dentry(&inode, Some(dir.clone()), name);
+        let dentry = inode.create_dentry(&inode, Some(dentry.clone()), name);
         Ok(dentry)
     }
-
 }
 impl INode for RamFSINodeLocked {
     fn get_metadata(&self) -> INodeMetaData {
@@ -225,13 +230,29 @@ impl INode for RamFSINodeLocked {
         }
     }
 
-    fn mkdir(&self, dir: &DentryRef, name: &str, flag: usize) -> Result<DentryRef> {
-        self.create_entity(dir, name, flag, INodeType::IFDIR)
+    fn mkdir(&self, dentry: &DentryRef, name: &str, flag: usize) -> Result<DentryRef> {
+        self.create_entity(dentry, name, flag, INodeType::IFDIR)
     }
 
-    fn create(&self, dir: &DentryRef, name: &str, flag: usize) -> Result<DentryRef> {
-        self.create_entity(dir, name, flag, INodeType::IFREG)
+    fn create(&self, dentry: &DentryRef, name: &str, flag: usize) -> Result<DentryRef> {
+        self.create_entity(dentry, name, flag, INodeType::IFREG)
     }
 
-
+    // fn rename(
+    //     &self,
+    //     dentry: &DentryRef,
+    //     name: &str,
+    //     new_name: &str,
+    //     flag: usize,
+    // ) -> Result<()> {
+    //     let fs = self.get_fs_special();
+    //     let mut fsw = fs.0.write();
+    //     let node_data = fsw.data.get_mut(&self.0.read().ino).ok_or_else(|| Error::new(ENOENT))?;
+    //     let sub_entity_ino =  node_data.children_ino.remove(name).ok_or_else(|| Error::new(ENOENT))?;
+    //     node_data.children_ino.insert(new_name.to_string(), sub_entity_ino);
+    //     if let Some(sub_entity_dentry) = dentry.write().subdirs.remove(name) {
+    //         dentry.write().subdirs.insert(new_name.to_string(), sub_entity_dentry);
+    //     };
+    //     Ok(())
+    // }
 }
