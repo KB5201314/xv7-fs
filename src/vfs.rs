@@ -3,7 +3,7 @@ use alloc::string::String;
 use core::str;
 use derive_more::Display;
 
-pub type FSMountFunc = fn(String) -> (FSRef, DentryRef);
+pub type FSMountFunc = fn(&str) -> (FSRef, DentryRef);
 pub type FSRef = Arc<dyn FileSystem>;
 pub type DentryRef = Arc<RwLock<Dentry>>;
 pub type INodeRef = Arc<dyn INode>;
@@ -44,7 +44,7 @@ impl RegisteredFS {
         self.mount_infos
             .insert(fstype, (fs_mount, Default::default()));
     }
-    pub fn mount_fs(&mut self, fstype: FSType, dev_name: String) -> (FSRef, DentryRef) {
+    pub fn mount_fs(&mut self, fstype: FSType, dev_name: &str) -> (FSRef, DentryRef) {
         if let Some((mount, mounted_fss)) = self.mount_infos.get_mut(&fstype) {
             // fake mount
             let result = mount(dev_name);
@@ -63,56 +63,19 @@ impl RegisteredFS {
         }
         self.root_dentry.as_ref().unwrap().clone()
     }
-    pub fn vfs_lookup(&mut self, path: &str) -> Result<DentryRef> {
-        let mut nd = self.path_init(path);
-        self.path_walk(&mut nd)?;
+    fn path_lookup<'a>(&mut self, path: &'a str, flags: LookupFlag) -> Result<NameIData<'a>> {
+        let mut nd = self.path_init(path, flags);
+        self.path_walk(&mut nd, flags)?;
         if nd.cur_ind < nd.paths.len() {
-            self.lookup_last(&mut nd)?;
-        }
-        Ok(nd.current)
-    }
-
-    fn lookup_last(&mut self, nd: &mut NameIData) -> Result<()> {
-        let dentry = self.lookup_at(nd.paths[nd.cur_ind], &nd.current)?;
-        return Ok(());
-    }
-
-    fn path_walk(&mut self, nd: &mut NameIData) -> Result<()> {
-        while nd.cur_ind + 1 < nd.paths.len() {
-            self.walk_component(nd)?;
-        }
-        return Ok(());
-    }
-
-    fn lookup_at(&mut self, name: &str, current: &DentryRef) -> Result<DentryRef> {
-        Ok({
-            let current_inode = &current.read().inode;
-            match current.read().subdirs.get(name) {
-                Some(dentry) => dentry.upgrade().unwrap(),
-                None => current_inode
-                    .upgrade()
-                    .unwrap()
-                    .lookup(current, name, 0)?
-                    .clone(),
+            // `path` may be '/'
+            if !flags.contains(LookupFlag::LOOKUP_PARENT) {
+                self.lookup_last(&mut nd, flags)?;
             }
-        })
-    }
-    fn walk_component(&mut self, nd: &mut NameIData) -> Result<()> {
-        let dentry = self.lookup_at(nd.paths[nd.cur_ind], &nd.current)?;
-        let nexti = dentry.read().inode.upgrade();
-        if nexti.is_none() {
-            return Err(Error::new(ENOENT));
         }
-        if nexti.unwrap().get_metadata().mode != INodeType::IFDIR {
-            Err(Error::new(ENOTDIR))
-        } else {
-            nd.cur_ind += 1;
-            nd.current = dentry.clone();
-            Ok(())
-        }
+        Ok(nd)
     }
 
-    fn path_init<'a>(&mut self, path: &'a str) -> NameIData<'a> {
+    fn path_init<'a>(&mut self, path: &'a str, _flags: LookupFlag) -> NameIData<'a> {
         if path.starts_with('/') {
             let root = self.get_root();
             let current = root.clone();
@@ -126,15 +89,94 @@ impl RegisteredFS {
             todo!();
         }
     }
+
+    fn path_walk(&mut self, nd: &mut NameIData, flags: LookupFlag) -> Result<()> {
+        let cur_inode = nd.current.read().get_inode()?;
+
+        if cur_inode.get_metadata().mode != INodeType::IFDIR {
+            return Err(Error::new(ENOTDIR));
+        }
+        while nd.cur_ind + 1 < nd.paths.len() {
+            self.walk_component(nd, flags)?;
+        }
+        return Ok(());
+    }
+
+    fn lookup_last(&mut self, nd: &mut NameIData, flags: LookupFlag) -> Result<()> {
+        let dentry = self.lookup_at(nd.paths[nd.cur_ind], &nd.current, flags)?;
+        nd.cur_ind += 1;
+        nd.current = dentry.clone();
+        return Ok(());
+    }
+
+    fn walk_component(&mut self, nd: &mut NameIData, flags: LookupFlag) -> Result<()> {
+        let dentry = self.lookup_at(nd.paths[nd.cur_ind], &nd.current, flags)?;
+        let nexti = dentry.read().inode.upgrade();
+        if nexti.is_none() {
+            return Err(Error::new(ENOENT));
+        }
+        if nexti.unwrap().get_metadata().mode != INodeType::IFDIR {
+            Err(Error::new(ENOTDIR))
+        } else {
+            nd.cur_ind += 1;
+            nd.current = dentry.clone();
+            Ok(())
+        }
+    }
+
+    fn lookup_at(
+        &mut self,
+        name: &str,
+        current: &DentryRef,
+        flags: LookupFlag,
+    ) -> Result<DentryRef> {
+        Ok({
+            let current_inode = current.read().inode.clone();
+            if !flags.contains(LookupFlag::LOOKUP_REVAL) {
+                if let Some(dentry) = current.read().subdirs.get(name) {
+                    return Ok(dentry.upgrade().unwrap());
+                }
+            }
+            current_inode
+                .upgrade()
+                .unwrap()
+                .lookup(current, name, 0)?
+                .clone()
+        })
+    }
+
+    pub fn vfs_lookup(&mut self, path: &str) -> Result<DentryRef> {
+        self.path_lookup(path, LookupFlag::empty())
+            .map(|nd| nd.current)
+    }
+    pub fn vfs_mkdir(&mut self, path: &str) -> Result<DentryRef> {
+        let mut nd = self.path_lookup(path, LookupFlag::LOOKUP_PARENT)?;
+        let parent = nd.current.clone();
+        if nd.cur_ind >= nd.paths.len() /* `/` */ || self.lookup_last(&mut nd, LookupFlag::empty()).is_ok()
+        {
+            Err(Error::new(EEXIST))
+        } else {
+            let parent_inode = parent.read().get_inode()?;
+            parent_inode.mkdir(&parent, nd.paths[nd.cur_ind], 0)
+        }
+    }
 }
 
-pub struct NameIData<'nd> {
+struct NameIData<'nd> {
     current: DentryRef,
     root: DentryRef,
     paths: Vec<&'nd str>,
     cur_ind: usize,
 }
 
+bitflags! {
+struct LookupFlag:u32 {
+    const LOOKUP_FOLLOW = 0b00000001;   // follow link (not currently implemented)
+    const LOOKUP_DIRECTORY = 0b00000010;// search a directory (not currently implemented)
+    const LOOKUP_PARENT = 0b00000100;   // search the parent and ignore the tail
+    const LOOKUP_REVAL = 0b00001000;    // search on fs instead of dentry cache
+}
+}
 pub trait FileSystem: Send + Sync {
     // fn alloc_inode(&self, fs: &FSRef) -> Result<INodeRef>;
     // fn get_inode(&self, ino: usize) -> Result<INodeRef>;
@@ -152,13 +194,19 @@ pub struct Dentry {
     // d_fsdata: *mut u8,
 }
 
+impl Dentry {
+    pub fn get_inode(&self) -> Result<INodeRef> {
+        self.inode.upgrade().ok_or(Error::new(ENOENT))
+    }
+}
+
 unsafe impl Send for Dentry {}
 
 impl fmt::Display for Dentry {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "dentry of inode: {}",
+            "inode_of_dentry: {{{}}}",
             self.inode.upgrade().unwrap().get_metadata()
         )
     }
@@ -198,7 +246,7 @@ pub trait INode: Sync + Send {
     //     int (*link) (struct dentry *,struct inode *,struct dentry *);
     //     int (*unlink) (struct inode *,struct dentry *);
     //     int (*symlink) (struct inode *,struct dentry *,const char *);
-    fn mkdir(&self, name: &str, flag: usize) -> Result<()>;
+    fn mkdir(&self, dir: &DentryRef, name: &str, _: usize) -> Result<DentryRef>;
     //     int (*mkdir) (struct inode *,struct dentry *,umode_t);
     //     int (*rmdir) (struct inode *,struct dentry *);
     //     int (*mknod) (struct inode *,struct dentry *,umode_t,dev_t);
