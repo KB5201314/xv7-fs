@@ -80,8 +80,8 @@ impl RamFSLocked {
     }
 
     fn link_inode(&self, parent: &INodeRef, sub: &INodeRef, name: &str) {
-        let sub_ino = sub.get_metadata().ino;
-        let parent_ino = parent.get_metadata().ino;
+        let sub_ino = sub.get_ino();
+        let parent_ino = parent.get_ino();
         let mut fs = self.0.write();
         let parent_data = fs.data.get_mut(&parent_ino).unwrap();
         parent_data.children_ino.insert(String::from(name), sub_ino);
@@ -132,13 +132,7 @@ impl RamFSINodeLocked {
         let data = fs.data.get(&ino).unwrap();
         data.clone()
     }
-    // fn get_node_data_mut(&self) -> NodeData {
-    //     let fs = self.get_fs_special();
-    //     let fs = fs.0.read();
-    //     let ino = self.0.read().ino;
-    //     let data = fs.data.get(&ino).unwrap();
-    //     data.clone()
-    // }
+
     fn get_fs_special(&self) -> Arc<RamFSLocked> {
         return self.0.read().fs.upgrade().unwrap();
     }
@@ -172,13 +166,7 @@ impl RamFSINodeLocked {
         return dentry;
     }
 
-    fn create_entity(
-        &self,
-        dentry: &DentryRef,
-        name: &str,
-        _: usize,
-        mode: INodeType,
-    ) -> Result<DentryRef> {
+    fn create_entity(&self, dentry: &DentryRef, name: &str, mode: INodeType) -> Result<DentryRef> {
         let fs = self.get_fs_special();
         let inode = fs
             .alloc_inode(
@@ -199,15 +187,21 @@ impl RamFSINodeLocked {
     }
 }
 impl INode for RamFSINodeLocked {
+    fn get_ino(&self) -> usize {
+        return self.0.read().ino;
+    }
+
     fn get_metadata(&self) -> INodeMetaData {
-        self.get_node_data().metadata
+        let fs = self.get_fs_special();
+        let fs = fs.0.read();
+        let data = fs.data.get(&self.get_ino()).unwrap();
+        data.metadata.clone()
     }
 
     fn set_metadata(&self, metadata: &INodeMetaData) {
         let fs = self.get_fs_special();
         let mut fs = fs.0.write();
-        let ino = self.0.read().ino;
-        let data = fs.data.get_mut(&ino).unwrap();
+        let data = fs.data.get_mut(&self.get_ino()).unwrap();
         data.metadata = metadata.clone();
     }
     fn get_fs(&self) -> FSRef {
@@ -217,7 +211,7 @@ impl INode for RamFSINodeLocked {
         return self.0.read().dentries.clone();
     }
 
-    fn lookup(&self, dir: &DentryRef, name: &str, _: usize) -> Result<DentryRef> {
+    fn lookup(&self, dir: &DentryRef, name: &str) -> Result<DentryRef> {
         let node_data = self.get_node_data();
         match node_data.children_ino.get(name) {
             Some(ino) => {
@@ -230,22 +224,16 @@ impl INode for RamFSINodeLocked {
         }
     }
 
-    fn mkdir(&self, dentry: &DentryRef, name: &str, flag: usize) -> Result<DentryRef> {
-        self.create_entity(dentry, name, flag, INodeType::IFDIR)
+    fn mkdir(&self, dentry: &DentryRef, name: &str) -> Result<DentryRef> {
+        self.create_entity(dentry, name, INodeType::IFDIR)
     }
 
-    fn unlink(
-        &self,
-        dentry: &DentryRef,
-        name: &str,
-        target: &DentryRef,
-        flag: usize,
-    ) -> Result<()> {
+    fn unlink(&self, dentry: &DentryRef, name: &str) -> Result<()> {
         let fs = self.get_fs_special();
         let mut fsw = fs.0.write();
         let node_data = fsw
             .data
-            .get_mut(&self.0.read().ino)
+            .get_mut(&self.get_ino())
             .ok_or_else(|| Error::new(ENOENT))?;
         node_data
             .children_ino
@@ -255,26 +243,26 @@ impl INode for RamFSINodeLocked {
         Ok(())
     }
 
-    fn create(&self, dentry: &DentryRef, name: &str, flag: usize) -> Result<DentryRef> {
-        self.create_entity(dentry, name, flag, INodeType::IFREG)
+    fn create(&self, dentry: &DentryRef, name: &str) -> Result<DentryRef> {
+        self.create_entity(dentry, name, INodeType::IFREG)
     }
 
-    fn readdir_inodes(&self, dentry: &DentryRef, flag: usize) -> Result<BTreeMap<String, usize>> {
+    fn readdir_inodes(&self, _dentry: &DentryRef) -> Result<BTreeMap<String, usize>> {
         let fs = self.get_fs_special();
-        let fsr = fs.0.write();
+        let fsr = fs.0.read();
         let node_data = fsr
             .data
-            .get(&self.0.read().ino)
+            .get(&self.get_ino())
             .ok_or_else(|| Error::new(ENOENT))?;
         Ok(node_data.children_ino.clone())
     }
 
     fn write(&self, file: &FileRef, buf: &[u8]) -> Result<usize> {
         let fs = self.get_fs_special();
-        let mut fsr = fs.0.write();
-        let node_data = fsr
+        let mut fsw = fs.0.write();
+        let node_data = fsw
             .data
-            .get_mut(&self.0.read().ino)
+            .get_mut(&self.get_ino())
             .ok_or_else(|| Error::new(ENOENT))?;
         let mut fw = file.write();
         if fw.mode.contains(FileMode::O_APPEND) {
@@ -294,7 +282,7 @@ impl INode for RamFSINodeLocked {
         let mut fsr = fs.0.write();
         let node_data = fsr
             .data
-            .get_mut(&self.0.read().ino)
+            .get_mut(&self.get_ino())
             .ok_or_else(|| Error::new(ENOENT))?;
         let mut fw = file.write();
         if fw.pos >= node_data.data.len() {
@@ -311,25 +299,23 @@ impl INode for RamFSINodeLocked {
         let fsr = fs.0.write();
         let node_data = fsr
             .data
-            .get(&self.0.read().ino)
+            .get(&self.get_ino())
             .ok_or_else(|| Error::new(ENOENT))?;
         if file.read().pos >= node_data.children_ino.len() {
             return Ok(0usize);
         }
         let pos = file.read().pos;
         let entity = node_data.children_ino.iter().skip(pos).next().unwrap();
-        unsafe {
-            (*dir).ino = *entity.1;
-            (*dir).off = pos;
-            (*dir).name_len = entity.0.len();
-            (*dir).name[0..entity.0.len()].clone_from_slice(entity.0.as_bytes());
-            (*dir).name[entity.0.len()] = 0;
-        }
+        (*dir).ino = *entity.1;
+        (*dir).off = pos;
+        (*dir).name_len = entity.0.len();
+        (*dir).name[0..entity.0.len()].clone_from_slice(entity.0.as_bytes());
+        (*dir).name[entity.0.len()] = 0;
         file.write().pos += 1;
         Ok(1)
     }
 
-    fn getattr(&self, dentry: &DentryRef, stat: &mut Stat, flag: usize) -> Result<()> {
+    fn getattr(&self, _dentry: &DentryRef, stat: &mut Stat) -> Result<()> {
         let md = self.get_metadata();
         stat.mode = md.mode;
         stat.uid = md.uid;

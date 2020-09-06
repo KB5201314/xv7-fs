@@ -159,7 +159,7 @@ impl RegisteredFS {
             current_inode
                 .upgrade()
                 .unwrap()
-                .lookup(current, name, 0)?
+                .lookup(current, name)?
                 .clone()
         })
     }
@@ -176,7 +176,7 @@ impl RegisteredFS {
         } else {
             let parent = nd.current.clone();
             let parent_inode = parent.read().get_inode()?;
-            parent_inode.mkdir(&parent, nd.paths[nd.cur_ind], 0)
+            parent_inode.mkdir(&parent, nd.paths[nd.cur_ind])
         }
     }
     pub fn vfs_unlink(&mut self, path: &str) -> Result<()> {
@@ -196,13 +196,13 @@ impl RegisteredFS {
         }
         /* if delete directory, it must be empty first */
         if current_inode.get_metadata().mode == INodeType::IFDIR {
-            let inodes = current_inode.readdir_inodes(&nd.current, 0)?;
+            let inodes = current_inode.readdir_inodes(&nd.current)?;
             if inodes.len() != 0 {
                 return Err(Error::new(ENOTEMPTY));
             }
         }
         let parent_inode = parent.read().get_inode()?;
-        parent_inode.unlink(&parent, nd.paths[nd.cur_ind - 1], &nd.current, 0)
+        parent_inode.unlink(&parent, nd.paths[nd.cur_ind - 1])
     }
     pub fn vfs_create(&mut self, path: &str) -> Result<DentryRef> {
         if path.ends_with("/") {
@@ -214,14 +214,14 @@ impl RegisteredFS {
             Err(Error::new(EEXIST))
         } else {
             let parent_inode = parent.read().get_inode()?;
-            parent_inode.create(&parent, nd.paths[nd.cur_ind], 0)
+            parent_inode.create(&parent, nd.paths[nd.cur_ind])
         }
     }
 
     pub fn vfs_open(&mut self, path: &str, mode: FileMode) -> Result<FileRef> {
         // TODO: check `mode`
         // TODO: search in self.opened_files
-        let mut nd = self.path_lookup(path, LookupFlag::empty())?;
+        let nd = self.path_lookup(path, LookupFlag::empty())?;
         let lookup_result = nd.current;
         let inode = lookup_result
             .read()
@@ -314,7 +314,7 @@ impl RegisteredFS {
             .inode
             .upgrade()
             .ok_or_else(|| Error::new(ENOENT))?;
-        inode.getattr(&nd.current, stat, 0)
+        inode.getattr(&nd.current, stat)
     }
 }
 
@@ -362,7 +362,7 @@ impl fmt::Display for Dentry {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "inode_of_dentry: {{{}}}",
+            "inode_of_dentry: {{{:?}}}",
             self.inode.upgrade().unwrap().get_metadata()
         )
     }
@@ -386,6 +386,7 @@ impl Default for INodeType {
 }
 
 pub trait INode: Sync + Send {
+    fn get_ino(&self) -> usize;
     fn get_metadata(&self) -> INodeMetaData;
     fn set_metadata(&self, metadata: &INodeMetaData);
     fn get_fs(&self) -> FSRef;
@@ -393,27 +394,26 @@ pub trait INode: Sync + Send {
 
     // https://elixir.bootlin.com/linux/latest/source/include/linux/fs.h#L1970
     // inode_operations
-    fn lookup(&self, dentry: &DentryRef, name: &str, flag: usize) -> Result<DentryRef>;
+    fn lookup(&self, dentry: &DentryRef, name: &str) -> Result<DentryRef>;
     //     const char * (*get_link) (struct dentry *, struct inode *, struct delayed_call *);
     //     int (*permission) (struct inode *, int);
     //     struct posix_acl * (*get_acl)(struct inode *, int);
     //     int (*readlink) (struct dentry *, char __user *,int);
-    fn create(&self, dentry: &DentryRef, name: &str, flag: usize) -> Result<DentryRef>;
+    fn create(&self, dentry: &DentryRef, name: &str) -> Result<DentryRef>;
     //     int (*create) (struct inode *,struct dentry *, umode_t, bool);
     //     int (*link) (struct dentry *,struct inode *,struct dentry *);
-    fn unlink(&self, dentry: &DentryRef, name: &str, target: &DentryRef, flag: usize)
-        -> Result<()>;
+    fn unlink(&self, dentry: &DentryRef, name: &str) -> Result<()>;
     //     int (*unlink) (struct inode *,struct dentry *);
     //     int (*symlink) (struct inode *,struct dentry *,const char *);
-    fn mkdir(&self, dentry: &DentryRef, name: &str, flag: usize) -> Result<DentryRef>;
+    fn mkdir(&self, dentry: &DentryRef, name: &str) -> Result<DentryRef>;
     //     int (*mkdir) (struct inode *,struct dentry *,umode_t);
-    // fn rmdir(&self, dentry: &DentryRef, name: &str, target: &DentryRef, flag: usize) -> Result<()>;
+    // fn rmdir(&self, dentry: &DentryRef, name: &str, target: &DentryRef) -> Result<()>;
     //     int (*rmdir) (struct inode *,struct dentry *);
     //     int (*mknod) (struct inode *,struct dentry *,umode_t,dev_t);
-    // fn rename(&self, dentry: &DentryRef, name: &str, new_name: &str, flag: usize) -> Result<()>;
+    // fn rename(&self, dentry: &DentryRef, name: &str, new_name: &str) -> Result<()>;
     //     int (*rename) (struct inode *, struct dentry *,
     //             struct inode *, struct dentry *, unsigned int);
-    fn getattr(&self, dentry: &DentryRef, stat: &mut Stat, flag: usize) -> Result<()>;
+    fn getattr(&self, dentry: &DentryRef, stat: &mut Stat) -> Result<()>;
     //     int (*setattr) (struct dentry *, struct iattr *);
     //     int (*getattr) (const struct path *, struct kstat *, u32, unsigned int);
     //     ssize_t (*listxattr) (struct dentry *, char *, size_t);
@@ -472,7 +472,7 @@ pub trait INode: Sync + Send {
     // int (*lseek) (struct inode *, struct file *, off_t, int);
     // int (*read) (struct inode *, struct file *, char *, int);
     // int (*write) (struct inode *, struct file *, const char *, int);
-    fn readdir_inodes(&self, dentry: &DentryRef, flag: usize) -> Result<BTreeMap<String, usize>>;
+    fn readdir_inodes(&self, dentry: &DentryRef) -> Result<BTreeMap<String, usize>>;
     fn readdir(&self, file: &FileRef, dir: &mut Direntory) -> Result<usize>;
     // int (*readdir) (struct inode *, struct file *, void *, filldir_t);
     // int (*select) (struct inode *, struct file *, int, select_table *);
@@ -511,7 +511,7 @@ pub struct INodeMetaData {
     pub link: String,
 }
 
-impl fmt::Display for INodeMetaData {
+impl fmt::Debug for INodeMetaData {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -545,7 +545,7 @@ impl fmt::Display for File {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "File {{path: {}, pos: {}, ref_count: {}, inode: {}, mode: {:?}}}",
+            "File {{path: {}, pos: {}, ref_count: {}, inode: {:?}, mode: {:?}}}",
             self.path,
             self.pos,
             self.ref_count,
