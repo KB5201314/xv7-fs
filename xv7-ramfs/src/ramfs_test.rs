@@ -1,34 +1,14 @@
-#![feature(box_syntax)]
-
-#[macro_use]
-extern crate bitflags;
-
-pub mod ramfs;
-pub mod vfs;
-extern crate alloc;
-use alloc::collections::btree_map::BTreeMap;
-use alloc::sync::{Arc, Weak};
-use alloc::vec::Vec;
-use core::fmt;
-use core::str;
-use derive_new::new;
-use lazy_static::lazy_static;
-use spin::{Mutex, RwLock};
-use usyscall::error::*;
-use vfs::*;
-use Option::*;
-
-lazy_static! {
-    pub static ref REGISTERED_FS: Mutex<vfs::RegisteredFS> = Mutex::new(RegisteredFS::new());
-}
-
-fn main() {
-    println!("run `cargo test` instead");
-}
-
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::ramfs;
+    use xv7_fs::vfs::*;
+    use lazy_static::lazy_static;
+    use spin::Mutex;
+    use usyscall::error::*;
+
+    lazy_static! {
+        pub static ref REGISTERED_FS: Mutex<RegisteredFS> = Mutex::new(RegisteredFS::new());
+    }
 
     #[allow(unused_must_use)]
     #[test]

@@ -1,0 +1,19 @@
+[package]
+name = "xv7-ramfs"
+version = "0.1.0"
+authors = ["imlk <imlk.geek@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+lazy_static = { version = "1.4.0", features = ["spin_no_std"] }
+vte = "0.7.1"
+spin = "0.5.2"
+zeroize = "1.1.0"
+x86_64 = "0.11.0"
+bitflags = "1.2.1"
+usyscall = { git = "https://github.com/imtsuki/xv7", package = "xv7-usyscall" }
+derive-new = "0.5.8"
+derive_more = "0.99.7"
+xv7-fs = {path = "../xv7-fs", package = "xv7-fs" }

@@ -1,5 +1,15 @@
-use super::*;
-use vfs::*;
+use alloc::string::String;
+use core::str;
+use xv7_fs::vfs::*;
+
+use alloc::collections::btree_map::BTreeMap;
+use alloc::sync::{Arc, Weak};
+use alloc::vec::Vec;
+use derive_new::new;
+use spin::Mutex;
+use spin::RwLock;
+use usyscall::error::*;
+use Option::*;
 
 #[derive(new)]
 pub struct RamFS {
