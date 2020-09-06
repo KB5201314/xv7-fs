@@ -117,6 +117,11 @@ mod tests {
         );
         assert_eq!(buf[0..data2.len()], data2[..]);
         assert_eq!(test_vfs_close(&file), Ok(()));
+
+        // test for vfs_stat
+        let mut stat = Stat::default();
+        assert_eq!(test_vfs_stat("/test_file_rw", &mut stat), Ok(()));
+
         // test for vfs_readdir
         let mut dir = Direntory::default();
         assert_eq!(test_vfs_mkdir("/test_vfs_readdir"), Ok(()));
@@ -125,12 +130,21 @@ mod tests {
         let file = test_vfs_open("/test_vfs_readdir", FileMode::O_RDWR);
         assert!(file.is_ok());
         let file = file.unwrap();
-        assert_eq!(test_vfs_readdir(&file, &mut dir), Ok((1)));
-        // TODO: test ino
+        assert_eq!(test_vfs_readdir(&file, &mut dir), Ok(1));
         assert_eq!(&dir.name[0..dir.name_len], "test_dir".as_bytes());
-        assert_eq!(test_vfs_readdir(&file, &mut dir), Ok((1)));
+        assert_eq!(
+            test_vfs_stat("/test_vfs_readdir/test_dir", &mut stat),
+            Ok(())
+        );
+        assert_eq!(dir.ino, stat.ino);
+        assert_eq!(test_vfs_readdir(&file, &mut dir), Ok(1));
         assert_eq!(&dir.name[0..dir.name_len], "test_dir2".as_bytes());
-        assert_eq!(test_vfs_readdir(&file, &mut dir), Ok((0)));
+        assert_eq!(
+            test_vfs_stat("/test_vfs_readdir/test_dir2", &mut stat),
+            Ok(())
+        );
+        assert_eq!(dir.ino, stat.ino);
+        assert_eq!(test_vfs_readdir(&file, &mut dir), Ok(0));
         assert_eq!(test_vfs_close(&file), Ok(()));
     }
 
@@ -200,5 +214,10 @@ mod tests {
             ret
         );
         Ok(ret)
+    }
+    fn test_vfs_stat(path: &str, stat: *mut Stat) -> Result<()> {
+        REGISTERED_FS.lock().vfs_stat(path, unsafe { &mut *stat })?;
+        println!("[vfs_stat ({} {:?})]", path, unsafe { &*stat });
+        Ok(())
     }
 }

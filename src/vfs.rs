@@ -186,7 +186,7 @@ impl RegisteredFS {
             return Err(Error::new(EINVAL));
         }
         let parent = nd.current.clone();
-        self.lookup_last(&mut nd, LookupFlag::LOOKUP_REVAL)?;
+        self.lookup_last(&mut nd, LookupFlag::empty())?;
         let current_inode = nd.current.read().get_inode()?;
         /* at least for now，you cannot delete a file which is opened by a process */
         for file in &self.opened_files {
@@ -221,7 +221,8 @@ impl RegisteredFS {
     pub fn vfs_open(&mut self, path: &str, mode: FileMode) -> Result<FileRef> {
         // TODO: check `mode`
         // TODO: search in self.opened_files
-        let lookup_result = self.vfs_lookup(path)?;
+        let mut nd = self.path_lookup(path, LookupFlag::empty())?;
+        let lookup_result = nd.current;
         let inode = lookup_result
             .read()
             .inode
@@ -305,6 +306,16 @@ impl RegisteredFS {
         let inode = file.read().inode.clone();
         inode.readdir(file, dir)
     }
+    pub fn vfs_stat(&mut self, path: &str, stat: &mut Stat) -> Result<()> {
+        let nd = self.path_lookup(path, LookupFlag::empty())?;
+        let inode = nd
+            .current
+            .read()
+            .inode
+            .upgrade()
+            .ok_or_else(|| Error::new(ENOENT))?;
+        inode.getattr(&nd.current, stat, 0)
+    }
 }
 
 struct NameIData<'nd> {
@@ -319,7 +330,7 @@ struct LookupFlag:u32 {
     const LOOKUP_FOLLOW = 0b00000001;   // follow link (not currently implemented)
     const LOOKUP_DIRECTORY = 0b00000010;// search a directory
     const LOOKUP_PARENT = 0b00000100;   // search the parent and ignore the tail
-    const LOOKUP_REVAL = 0b00001000;    // search on fs instead of dentry cache
+    const LOOKUP_REVAL = 0b00001000;    // search on fs instead of dentry cache (without test)
 }
 }
 pub trait FileSystem: Send + Sync {
@@ -402,6 +413,7 @@ pub trait INode: Sync + Send {
     // fn rename(&self, dentry: &DentryRef, name: &str, new_name: &str, flag: usize) -> Result<()>;
     //     int (*rename) (struct inode *, struct dentry *,
     //             struct inode *, struct dentry *, unsigned int);
+    fn getattr(&self, dentry: &DentryRef, stat: &mut Stat, flag: usize) -> Result<()>;
     //     int (*setattr) (struct dentry *, struct iattr *);
     //     int (*getattr) (const struct path *, struct kstat *, u32, unsigned int);
     //     ssize_t (*listxattr) (struct dentry *, char *, size_t);
@@ -570,4 +582,16 @@ impl Debug for Direntory {
             String::from_utf8_lossy(&self.name[0..self.name_len]),
         )
     }
+}
+
+#[derive(new, Clone, Default, Debug)]
+pub struct Stat {
+    pub mode: INodeType,
+    pub uid: usize,
+    pub gid: usize,
+    pub ino: usize,
+    pub atime: usize,
+    pub mtime: usize,
+    pub ctime: usize,
+    pub nlink: usize,
 }

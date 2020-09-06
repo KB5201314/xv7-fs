@@ -328,6 +328,19 @@ impl INode for RamFSINodeLocked {
         file.write().pos += 1;
         Ok(1)
     }
+
+    fn getattr(&self, dentry: &DentryRef, stat: &mut Stat, flag: usize) -> Result<()> {
+        let md = self.get_metadata();
+        stat.mode = md.mode;
+        stat.uid = md.uid;
+        stat.gid = md.gid;
+        stat.ino = md.ino;
+        stat.atime = md.atime;
+        stat.mtime = md.mtime;
+        stat.ctime = md.ctime;
+        stat.nlink = md.nlink;
+        Ok(())
+    }
     // fn rename(
     //     &self,
     //     dentry: &DentryRef,
