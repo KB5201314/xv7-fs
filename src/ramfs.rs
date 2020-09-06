@@ -234,7 +234,13 @@ impl INode for RamFSINodeLocked {
         self.create_entity(dentry, name, flag, INodeType::IFDIR)
     }
 
-    fn unlink(&self, dentry: &DentryRef, name: &str, target: &DentryRef, flag: usize) -> Result<()> {
+    fn unlink(
+        &self,
+        dentry: &DentryRef,
+        name: &str,
+        target: &DentryRef,
+        flag: usize,
+    ) -> Result<()> {
         let fs = self.get_fs_special();
         let mut fsw = fs.0.write();
         let node_data = fsw
@@ -261,6 +267,40 @@ impl INode for RamFSINodeLocked {
             .get(&self.0.read().ino)
             .ok_or_else(|| Error::new(ENOENT))?;
         Ok(node_data.children_ino.clone())
+    }
+
+    fn write(&self, file: &FileRef, buf: &[u8]) -> Result<usize> {
+        let fs = self.get_fs_special();
+        let mut fsr = fs.0.write();
+        let node_data = fsr
+            .data
+            .get_mut(&self.0.read().ino)
+            .ok_or_else(|| Error::new(ENOENT))?;
+        let mut fw = file.write();
+        let len = buf.len();
+        if fw.pos + len > node_data.data.len() {
+            node_data.data.resize(fw.pos + len, 0);
+        }
+        node_data.data[fw.pos..(fw.pos + len)].clone_from_slice(&buf[0..len]);
+        fw.pos += len;
+        Ok(len)
+    }
+
+    fn read(&self, file: &FileRef, buf: &mut [u8]) -> Result<usize> {
+        let fs = self.get_fs_special();
+        let mut fsr = fs.0.write();
+        let node_data = fsr
+            .data
+            .get_mut(&self.0.read().ino)
+            .ok_or_else(|| Error::new(ENOENT))?;
+        let mut fw = file.write();
+        if fw.pos >= node_data.data.len() {
+            return Ok(1usize);
+        }
+        let len = core::cmp::min(buf.len(), node_data.data.len() - fw.pos);
+        buf[0..len].clone_from_slice(&node_data.data[fw.pos..(fw.pos + len)]);
+        fw.pos += len;
+        Ok(len)
     }
 
     // fn rename(

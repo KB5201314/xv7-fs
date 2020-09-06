@@ -221,23 +221,17 @@ impl RegisteredFS {
         // TODO: check `mode`
         // TODO: search in self.opened_files
         let lookup_result = self.vfs_lookup(path)?;
-        let file = Arc::new(RwLock::new(File::new(
-            path.to_string(),
-            0,
-            1,
-            lookup_result
-                .read()
-                .inode
-                .upgrade()
-                .ok_or_else(|| Error::new(ENOENT))?
-                .clone(),
-            mode,
-        )));
+        let inode = lookup_result
+            .read()
+            .inode
+            .upgrade()
+            .ok_or_else(|| Error::new(ENOENT))?;
+        let file = Arc::new(RwLock::new(File::new(path.to_string(), 0, 1, inode, mode)));
         self.opened_files.push(file.clone());
         return Ok(file);
     }
 
-    pub fn vfs_close(&mut self, file: &mut FileRef) -> Result<()> {
+    pub fn vfs_close(&mut self, file: &FileRef) -> Result<()> {
         {
             let mut fw = file.write();
             fw.ref_count -= 1;
@@ -250,6 +244,43 @@ impl RegisteredFS {
             }
         }
         return Ok(());
+    }
+
+    pub fn vfs_write(&mut self, file: &FileRef, buf: &[u8]) -> Result<usize> {
+        // TODO: check buf address is safe to read
+        /* check write */
+        {
+            let fr = file.read();
+            /* at least for now，you can only call write to a regular file */
+            if fr.inode.get_metadata().mode != INodeType::IFREG {
+                return Err(Error::new(EINVAL));
+            }
+            if !(fr.mode.contains(FileMode::O_WRONLY)
+                || fr.mode.contains(FileMode::O_RDWR)
+                || fr.mode.contains(FileMode::O_APPEND))
+            {
+                return Err(Error::new(EBADF));
+            }
+        }
+        let inode = file.read().inode.clone();
+        inode.write(file, buf)
+    }
+
+    pub fn vfs_read(&mut self, file: &FileRef, buf: &mut [u8]) -> Result<usize> {
+        // TODO: check buf address is safe to write
+        /* check read */
+        {
+            let fr = file.read();
+            /* at least for now，you can only call read to a regular file */
+            if fr.inode.get_metadata().mode != INodeType::IFREG {
+                return Err(Error::new(EINVAL));
+            }
+            if !(fr.mode.contains(FileMode::O_RDONLY) || fr.mode.contains(FileMode::O_RDWR)) {
+                return Err(Error::new(EBADF));
+            }
+        }
+        let inode = file.read().inode.clone();
+        inode.read(file, buf)
     }
 }
 
@@ -363,7 +394,9 @@ pub trait INode: Sync + Send {
     // https://elixir.bootlin.com/linux/latest/source/include/linux/fs.h#L1923
     // struct file_operations
     //     loff_t (*llseek) (struct file *, loff_t, int);
+    fn read(&self, file: &FileRef, buf: &mut [u8]) -> Result<usize>;
     //     ssize_t (*read) (struct file *, char __user *, size_t, loff_t *);
+    fn write(&self, file: &FileRef, buf: &[u8]) -> Result<usize>;
     //     ssize_t (*write) (struct file *, const char __user *, size_t, loff_t *);
     //     ssize_t (*read_iter) (struct kiocb *, struct iov_iter *);
     //     ssize_t (*write_iter) (struct kiocb *, struct iov_iter *);

@@ -72,7 +72,6 @@ mod tests {
 
         // test for vfs_close
         assert_eq!(test_vfs_close(&mut file.unwrap()), Ok(()));
-        
         // test for vfs_rmdir
         assert_eq!(test_vfs_unlink("/"), Err(Error::new(EINVAL)));
         assert_eq!(test_vfs_unlink("/abc"), Err(Error::new(ENOTEMPTY)));
@@ -85,6 +84,39 @@ mod tests {
         assert_eq!(test_vfs_unlink("/test_file_2"), Err(Error::new(EBUSY)));
         assert_eq!(test_vfs_close(&mut file.unwrap()), Ok(()));
         assert_eq!(test_vfs_unlink("/test_file_2"), Ok(()));
+
+        // test for vfs_write
+        let data1 = vec![1, 2, 3, 4, 5];
+        let data2 = vec![10, 9, 8, 7, 6, 5];
+        let mut buf = vec![0; 20];
+        assert_eq!(test_vfs_create("/test_file_rw"), Ok(()));
+        let file = test_vfs_open("/test_file_rw", FileMode::O_WRONLY);
+        assert!(file.is_ok());
+        let file = file.unwrap();
+        assert_eq!(test_vfs_write(&file, &data1), Ok(data1.len()));
+        assert_eq!(
+            test_vfs_read(&file, &mut buf[0..data1.len()]),
+            Err(Error::new(EBADF))
+        );
+        assert_eq!(test_vfs_write(&file, &data2), Ok(data2.len()));
+        assert_eq!(test_vfs_close(&file), Ok(()));
+
+        // test for vfs_read
+        let file = test_vfs_open("/test_file_rw", FileMode::O_RDONLY);
+        assert!(file.is_ok());
+        let file = file.unwrap();
+        assert_eq!(test_vfs_write(&file, &data1), Err(Error::new(EBADF)));
+        assert_eq!(
+            test_vfs_read(&file, &mut buf[0..data1.len()]),
+            Ok(data1.len())
+        );
+        assert_eq!(buf[0..data1.len()], data1[..]);
+        assert_eq!(
+            test_vfs_read(&file, &mut buf[0..data2.len()]),
+            Ok(data2.len())
+        );
+        assert_eq!(buf[0..data2.len()], data2[..]);
+        assert_eq!(test_vfs_close(&file), Ok(()));
     }
 
     fn test_vfs_lookup(path: &str) -> Result<()> {
@@ -124,9 +156,21 @@ mod tests {
         Ok(file)
     }
 
-    fn test_vfs_close(file: &mut FileRef) -> Result<()> {
+    fn test_vfs_close(file: &FileRef) -> Result<()> {
         REGISTERED_FS.lock().vfs_close(file)?;
         println!("[vfs_close ({})]", *file.read());
         Ok(())
+    }
+
+    fn test_vfs_write(file: &FileRef, data: &[u8]) -> Result<(usize)> {
+        let ret = REGISTERED_FS.lock().vfs_write(file, data)?;
+        println!("[vfs_write ({} {:?})] ret: {}", *file.read(), data, ret);
+        Ok((ret))
+    }
+
+    fn test_vfs_read(file: &FileRef, data: &mut [u8]) -> Result<(usize)> {
+        let ret = REGISTERED_FS.lock().vfs_read(file, data)?;
+        println!("[vfs_read ({} {:?})] ret: {}", *file.read(), data, ret);
+        Ok((ret))
     }
 }

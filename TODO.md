@@ -6,12 +6,11 @@
     - [] setattr
     - [] getattr
     - [] update_time
-    - [x] rmdir
-    - [] unlink
+    - [x] unlink
 
-- file_operations    
-    - [] read
-    - [] write
+- file_operations
+    - [x] read
+    - [x] write
 
 - extra syscall
     - [x] open
