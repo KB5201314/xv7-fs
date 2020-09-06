@@ -10,6 +10,7 @@
 
 - file_operations
     - [x] read
+    - [x] readdir
     - [x] write
 
 - extra syscall

@@ -306,7 +306,7 @@ impl INode for RamFSINodeLocked {
         Ok(len)
     }
 
-    fn readdir(&self, file: &FileRef, dir: *mut Direntory) -> Result<usize> {
+    fn readdir(&self, file: &FileRef, dir: &mut Direntory) -> Result<usize> {
         let fs = self.get_fs_special();
         let fsr = fs.0.write();
         let node_data = fsr

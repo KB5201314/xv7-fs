@@ -190,7 +190,9 @@ mod tests {
     }
 
     fn test_vfs_readdir(file: &FileRef, dir: *mut Direntory) -> Result<usize> {
-        let ret = REGISTERED_FS.lock().vfs_readdir(file, dir)?;
+        let ret = REGISTERED_FS
+            .lock()
+            .vfs_readdir(file, unsafe { &mut *dir })?;
         println!(
             "[vfs_readdir ({} {:?})] ret: {}",
             *file.read(),
