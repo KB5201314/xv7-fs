@@ -226,6 +226,11 @@ impl RegisteredFS {
             .inode
             .upgrade()
             .ok_or_else(|| Error::new(ENOENT))?;
+        if mode.contains(FileMode::O_DIRECTORY){
+            if inode.get_metadata().mode != INodeType::IFDIR {
+                return Err(Error::new(ENOTDIR));
+            }
+        }
         let file = Arc::new(RwLock::new(File::new(path.to_string(), 0, 1, inode, mode)));
         self.opened_files.push(file.clone());
         return Ok(file);
@@ -492,7 +497,7 @@ pub struct FileMode:u32 {
     const O_RDWR = 0b00000100;
     const O_APPEND = 0b00001000;    // mark the target file can only be appended
     const O_CREAT = 0b00010000;     // (not currently implemented)
-    const O_DIRECTORY = 0b00100000; // (not currently implemented)
+    const O_DIRECTORY = 0b00100000;
 }
 }
 
