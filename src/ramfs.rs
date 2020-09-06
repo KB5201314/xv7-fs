@@ -234,7 +234,7 @@ impl INode for RamFSINodeLocked {
         self.create_entity(dentry, name, flag, INodeType::IFDIR)
     }
 
-    fn rmdir(&self, dentry: &DentryRef, name: &str, target: &DentryRef, flag: usize) -> Result<()> {
+    fn unlink(&self, dentry: &DentryRef, name: &str, target: &DentryRef, flag: usize) -> Result<()> {
         let fs = self.get_fs_special();
         let mut fsw = fs.0.write();
         let node_data = fsw

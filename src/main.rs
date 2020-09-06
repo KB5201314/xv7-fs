@@ -51,13 +51,6 @@ mod tests {
         assert_eq!(test_vfs_mkdir("/abc/test_dir2"), Ok(()));
         assert_eq!(test_vfs_mkdir("/abc/test_dir3"), Ok(()));
 
-        // test for vfs_rmdir
-        assert_eq!(test_vfs_rmdir("/"), Err(Error::new(EINVAL)));
-        assert_eq!(test_vfs_rmdir("/abc"), Err(Error::new(ENOTEMPTY)));
-        assert_eq!(test_vfs_rmdir("/abc/"), Err(Error::new(ENOTEMPTY)));
-        assert_eq!(test_vfs_rmdir("/abc/test_dir3"), Ok(()));
-        assert_eq!(test_vfs_rmdir("/abc/test_dir3"), Err(Error::new(ENOENT)));
-
         // test for vfs_lookup
         assert_eq!(test_vfs_lookup("/"), Ok(()));
         assert_eq!(test_vfs_lookup("/abc"), Ok(()));
@@ -71,11 +64,27 @@ mod tests {
         assert_eq!(test_vfs_create("/"), Err(Error::new(EISDIR)));
         assert_eq!(test_vfs_create("/dir/"), Err(Error::new(EISDIR)));
         assert_eq!(test_vfs_create("/test_file"), Err(Error::new(EEXIST)));
+        assert_eq!(test_vfs_create("/test_file_2"), Ok(()));
+
         // test for vfs_open
         let file = test_vfs_open("/test_file", FileMode::O_RDWR);
         assert!(file.is_ok());
+
         // test for vfs_close
         assert_eq!(test_vfs_close(&mut file.unwrap()), Ok(()));
+        
+        // test for vfs_rmdir
+        assert_eq!(test_vfs_unlink("/"), Err(Error::new(EINVAL)));
+        assert_eq!(test_vfs_unlink("/abc"), Err(Error::new(ENOTEMPTY)));
+        assert_eq!(test_vfs_unlink("/abc/"), Err(Error::new(ENOTEMPTY)));
+        assert_eq!(test_vfs_unlink("/abc/test_dir3"), Ok(()));
+        assert_eq!(test_vfs_unlink("/abc/test_dir3"), Err(Error::new(ENOENT)));
+        assert_eq!(test_vfs_unlink("/abc/test_dir3"), Err(Error::new(ENOENT)));
+        let file = test_vfs_open("/test_file_2", FileMode::O_RDWR);
+        assert!(file.is_ok());
+        assert_eq!(test_vfs_unlink("/test_file_2"), Err(Error::new(EBUSY)));
+        assert_eq!(test_vfs_close(&mut file.unwrap()), Ok(()));
+        assert_eq!(test_vfs_unlink("/test_file_2"), Ok(()));
     }
 
     fn test_vfs_lookup(path: &str) -> Result<()> {
@@ -95,9 +104,9 @@ mod tests {
         );
         Ok(())
     }
-    fn test_vfs_rmdir(path: &str) -> Result<()> {
-        REGISTERED_FS.lock().vfs_rmdir(path)?;
-        println!("[vfs_rmdir ({})]", path,);
+    fn test_vfs_unlink(path: &str) -> Result<()> {
+        REGISTERED_FS.lock().vfs_unlink(path)?;
+        println!("[vfs_unlink ({})]", path,);
         Ok(())
     }
 

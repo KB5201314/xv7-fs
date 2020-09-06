@@ -6,7 +6,7 @@
     - [] setattr
     - [] getattr
     - [] update_time
-    - [] rmdir
+    - [x] rmdir
     - [] unlink
 
 - file_operations    

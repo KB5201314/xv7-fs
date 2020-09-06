@@ -178,21 +178,30 @@ impl RegisteredFS {
             parent_inode.mkdir(&parent, nd.paths[nd.cur_ind], 0)
         }
     }
-    pub fn vfs_rmdir(&mut self, path: &str) -> Result<()> {
+    pub fn vfs_unlink(&mut self, path: &str) -> Result<()> {
         let mut nd = self.path_lookup(path, LookupFlag::LOOKUP_PARENT)?;
         if nd.paths.len() == 0 {
             /* if path equals to `/` */
             return Err(Error::new(EINVAL));
         }
         let parent = nd.current.clone();
-        self.lookup_last(&mut nd, LookupFlag::LOOKUP_DIRECTORY)?;
+        self.lookup_last(&mut nd, LookupFlag::LOOKUP_REVAL)?;
         let current_inode = nd.current.read().get_inode()?;
-        let inodes = current_inode.readdir_inodes(&nd.current, 0)?;
-        if inodes.len() != 0 {
-            return Err(Error::new(ENOTEMPTY));
+        /* at least for now，you cannot delete a file which is opened by a process */
+        for file in &self.opened_files {
+            if ptr::eq(current_inode.as_ref(), file.read().inode.as_ref()) {
+                return Err(Error::new(EBUSY));
+            }
+        }
+        /* if delete directory, it must be empty first */
+        if current_inode.get_metadata().mode == INodeType::IFDIR {
+            let inodes = current_inode.readdir_inodes(&nd.current, 0)?;
+            if inodes.len() != 0 {
+                return Err(Error::new(ENOTEMPTY));
+            }
         }
         let parent_inode = parent.read().get_inode()?;
-        parent_inode.rmdir(&parent, nd.paths[nd.cur_ind - 1], &nd.current, 0)
+        parent_inode.unlink(&parent, nd.paths[nd.cur_ind - 1], &nd.current, 0)
     }
     pub fn vfs_create(&mut self, path: &str) -> Result<DentryRef> {
         if path.ends_with("/") {
@@ -216,7 +225,12 @@ impl RegisteredFS {
             path.to_string(),
             0,
             1,
-            lookup_result.read().inode.clone(),
+            lookup_result
+                .read()
+                .inode
+                .upgrade()
+                .ok_or_else(|| Error::new(ENOENT))?
+                .clone(),
             mode,
         )));
         self.opened_files.push(file.clone());
@@ -322,11 +336,13 @@ pub trait INode: Sync + Send {
     fn create(&self, dentry: &DentryRef, name: &str, flag: usize) -> Result<DentryRef>;
     //     int (*create) (struct inode *,struct dentry *, umode_t, bool);
     //     int (*link) (struct dentry *,struct inode *,struct dentry *);
+    fn unlink(&self, dentry: &DentryRef, name: &str, target: &DentryRef, flag: usize)
+        -> Result<()>;
     //     int (*unlink) (struct inode *,struct dentry *);
     //     int (*symlink) (struct inode *,struct dentry *,const char *);
     fn mkdir(&self, dentry: &DentryRef, name: &str, flag: usize) -> Result<DentryRef>;
     //     int (*mkdir) (struct inode *,struct dentry *,umode_t);
-    fn rmdir(&self, dentry: &DentryRef, name: &str, target: &DentryRef, flag: usize) -> Result<()>;
+    // fn rmdir(&self, dentry: &DentryRef, name: &str, target: &DentryRef, flag: usize) -> Result<()>;
     //     int (*rmdir) (struct inode *,struct dentry *);
     //     int (*mknod) (struct inode *,struct dentry *,umode_t,dev_t);
     // fn rename(&self, dentry: &DentryRef, name: &str, new_name: &str, flag: usize) -> Result<()>;
@@ -452,7 +468,7 @@ pub struct File {
     pub path: String,
     pub pos: usize,
     pub ref_count: usize,
-    pub inode: INodeWeakRef,
+    pub inode: INodeRef,
     pub mode: FileMode,
 }
 
@@ -464,7 +480,7 @@ impl fmt::Display for File {
             self.path,
             self.pos,
             self.ref_count,
-            self.inode.upgrade().unwrap().get_metadata(),
+            self.inode.get_metadata(),
             self.mode
         )
     }
