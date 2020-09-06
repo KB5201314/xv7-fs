@@ -306,6 +306,28 @@ impl INode for RamFSINodeLocked {
         Ok(len)
     }
 
+    fn readdir(&self, file: &FileRef, dir: *mut Direntory) -> Result<usize> {
+        let fs = self.get_fs_special();
+        let fsr = fs.0.write();
+        let node_data = fsr
+            .data
+            .get(&self.0.read().ino)
+            .ok_or_else(|| Error::new(ENOENT))?;
+        if file.read().pos >= node_data.children_ino.len() {
+            return Ok(0usize);
+        }
+        let pos = file.read().pos;
+        let entity = node_data.children_ino.iter().skip(pos).next().unwrap();
+        unsafe {
+            (*dir).ino = *entity.1;
+            (*dir).off = pos;
+            (*dir).name_len = entity.0.len();
+            (*dir).name[0..entity.0.len()].clone_from_slice(entity.0.as_bytes());
+            (*dir).name[entity.0.len()] = 0;
+        }
+        file.write().pos += 1;
+        Ok(1)
+    }
     // fn rename(
     //     &self,
     //     dentry: &DentryRef,

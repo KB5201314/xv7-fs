@@ -1,5 +1,6 @@
 use super::*;
 use alloc::string::String;
+use core::fmt::Debug;
 use core::ptr;
 use core::str;
 use derive_more::Display;
@@ -226,7 +227,7 @@ impl RegisteredFS {
             .inode
             .upgrade()
             .ok_or_else(|| Error::new(ENOENT))?;
-        if mode.contains(FileMode::O_DIRECTORY){
+        if mode.contains(FileMode::O_DIRECTORY) {
             if inode.get_metadata().mode != INodeType::IFDIR {
                 return Err(Error::new(ENOTDIR));
             }
@@ -286,6 +287,23 @@ impl RegisteredFS {
         }
         let inode = file.read().inode.clone();
         inode.read(file, buf)
+    }
+
+    pub fn vfs_readdir(&mut self, file: &FileRef, dir: *mut Direntory) -> Result<usize> {
+        // TODO: check dir pointer is safe to write
+        /* check read */
+        {
+            let fr = file.read();
+            /* muse be a directory */
+            if fr.inode.get_metadata().mode != INodeType::IFDIR {
+                return Err(Error::new(EINVAL));
+            }
+            if !(fr.mode.contains(FileMode::O_RDONLY) || fr.mode.contains(FileMode::O_RDWR)) {
+                return Err(Error::new(EBADF));
+            }
+        }
+        let inode = file.read().inode.clone();
+        inode.readdir(file, dir)
     }
 }
 
@@ -443,6 +461,7 @@ pub trait INode: Sync + Send {
     // int (*read) (struct inode *, struct file *, char *, int);
     // int (*write) (struct inode *, struct file *, const char *, int);
     fn readdir_inodes(&self, dentry: &DentryRef, flag: usize) -> Result<BTreeMap<String, usize>>;
+    fn readdir(&self, file: &FileRef, dir: *mut Direntory) -> Result<usize>;
     // int (*readdir) (struct inode *, struct file *, void *, filldir_t);
     // int (*select) (struct inode *, struct file *, int, select_table *);
     // int (*ioctl) (struct inode *, struct file *, unsigned int, unsigned long);
@@ -520,6 +539,35 @@ impl fmt::Display for File {
             self.ref_count,
             self.inode.get_metadata(),
             self.mode
+        )
+    }
+}
+
+const NAME_MAX_LEN: usize = 255;
+
+#[derive(new, Clone)]
+pub struct Direntory {
+    pub ino: usize,                   /* inode number */
+    pub off: usize,                   /* offset to this dirent */
+    pub name_len: usize,              /* length of this d_name */
+    pub name: [u8; NAME_MAX_LEN + 1], /* filename (null-terminated) */
+}
+
+impl Default for Direntory {
+    fn default() -> Direntory {
+        Direntory::new(0, 0, 0, [0; NAME_MAX_LEN + 1])
+    }
+}
+
+impl Debug for Direntory {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Direntory {{ino: {}, off: {}, name_len: {}, name: {:?}}}",
+            self.ino,
+            self.off,
+            self.name_len,
+            String::from_utf8_lossy(&self.name[0..self.name_len]),
         )
     }
 }

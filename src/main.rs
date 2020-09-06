@@ -117,6 +117,21 @@ mod tests {
         );
         assert_eq!(buf[0..data2.len()], data2[..]);
         assert_eq!(test_vfs_close(&file), Ok(()));
+        // test for vfs_readdir
+        let mut dir = Direntory::default();
+        assert_eq!(test_vfs_mkdir("/test_vfs_readdir"), Ok(()));
+        assert_eq!(test_vfs_mkdir("/test_vfs_readdir/test_dir"), Ok(()));
+        assert_eq!(test_vfs_mkdir("/test_vfs_readdir/test_dir2"), Ok(()));
+        let file = test_vfs_open("/test_vfs_readdir", FileMode::O_RDWR);
+        assert!(file.is_ok());
+        let file = file.unwrap();
+        assert_eq!(test_vfs_readdir(&file, &mut dir), Ok((1)));
+        // TODO: test ino
+        assert_eq!(&dir.name[0..dir.name_len], "test_dir".as_bytes());
+        assert_eq!(test_vfs_readdir(&file, &mut dir), Ok((1)));
+        assert_eq!(&dir.name[0..dir.name_len], "test_dir2".as_bytes());
+        assert_eq!(test_vfs_readdir(&file, &mut dir), Ok((0)));
+        assert_eq!(test_vfs_close(&file), Ok(()));
     }
 
     fn test_vfs_lookup(path: &str) -> Result<()> {
@@ -171,6 +186,17 @@ mod tests {
     fn test_vfs_read(file: &FileRef, data: &mut [u8]) -> Result<usize> {
         let ret = REGISTERED_FS.lock().vfs_read(file, data)?;
         println!("[vfs_read ({} {:?})] ret: {}", *file.read(), data, ret);
+        Ok(ret)
+    }
+
+    fn test_vfs_readdir(file: &FileRef, dir: *mut Direntory) -> Result<usize> {
+        let ret = REGISTERED_FS.lock().vfs_readdir(file, dir)?;
+        println!(
+            "[vfs_readdir ({} {:?})] ret: {}",
+            *file.read(),
+            unsafe { &*dir },
+            ret
+        );
         Ok(ret)
     }
 }
