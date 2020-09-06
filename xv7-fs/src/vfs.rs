@@ -4,6 +4,7 @@ use core::ptr;
 use core::str;
 use derive_more::Display;
 
+use crate::alloc::string::ToString;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
