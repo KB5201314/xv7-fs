@@ -2,5 +2,5 @@
 
 members = [
     "xv7-fs",
-    "xv7-ramfs",
+    "xv7-fs-ramfs",
 ]
