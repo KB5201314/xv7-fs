@@ -487,10 +487,10 @@ impl fmt::Display for INodeMetaData {
 
 bitflags! {
 pub struct FileMode:u32 {
-    const O_RDONLY = 0b00000001;    // (not currently implemented)
-    const O_WRONLY = 0b00000010;    // (not currently implemented)
-    const O_RDWR = 0b00000100;      // (not currently implemented)
-    const O_APPEND = 0b00001000;    // (not currently implemented)
+    const O_RDONLY = 0b00000001;
+    const O_WRONLY = 0b00000010;
+    const O_RDWR = 0b00000100;
+    const O_APPEND = 0b00001000;    // mark the target file can only be appended
     const O_CREAT = 0b00010000;     // (not currently implemented)
     const O_DIRECTORY = 0b00100000; // (not currently implemented)
 }

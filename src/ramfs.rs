@@ -277,6 +277,9 @@ impl INode for RamFSINodeLocked {
             .get_mut(&self.0.read().ino)
             .ok_or_else(|| Error::new(ENOENT))?;
         let mut fw = file.write();
+        if fw.mode.contains(FileMode::O_APPEND) {
+            fw.pos = node_data.data.len();
+        }
         let len = buf.len();
         if fw.pos + len > node_data.data.len() {
             node_data.data.resize(fw.pos + len, 0);

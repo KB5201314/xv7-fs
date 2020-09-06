@@ -162,15 +162,15 @@ mod tests {
         Ok(())
     }
 
-    fn test_vfs_write(file: &FileRef, data: &[u8]) -> Result<(usize)> {
+    fn test_vfs_write(file: &FileRef, data: &[u8]) -> Result<usize> {
         let ret = REGISTERED_FS.lock().vfs_write(file, data)?;
         println!("[vfs_write ({} {:?})] ret: {}", *file.read(), data, ret);
-        Ok((ret))
+        Ok(ret)
     }
 
-    fn test_vfs_read(file: &FileRef, data: &mut [u8]) -> Result<(usize)> {
+    fn test_vfs_read(file: &FileRef, data: &mut [u8]) -> Result<usize> {
         let ret = REGISTERED_FS.lock().vfs_read(file, data)?;
         println!("[vfs_read ({} {:?})] ret: {}", *file.read(), data, ret);
-        Ok((ret))
+        Ok(ret)
     }
 }
