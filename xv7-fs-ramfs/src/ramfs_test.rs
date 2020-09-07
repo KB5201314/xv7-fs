@@ -52,7 +52,7 @@ mod tests {
 
         // test for vfs_close
         assert_eq!(test_vfs_close(&mut file.unwrap()), Ok(()));
-        // test for vfs_rmdir
+        // test for vfs_unlink
         assert_eq!(test_vfs_unlink("/"), Err(Error::new(EINVAL)));
         assert_eq!(test_vfs_unlink("/abc"), Err(Error::new(ENOTEMPTY)));
         assert_eq!(test_vfs_unlink("/abc/"), Err(Error::new(ENOTEMPTY)));
