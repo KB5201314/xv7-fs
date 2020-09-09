@@ -1,10 +1,10 @@
 #[cfg(test)]
 mod tests {
     use crate::ramfs;
-    use xv7_fs::vfs::*;
     use lazy_static::lazy_static;
     use spin::Mutex;
     use usyscall::error::*;
+    use xv7_fs::vfs::*;
 
     lazy_static! {
         pub static ref REGISTERED_FS: Mutex<RegisteredFS> = Mutex::new(RegisteredFS::new());
@@ -49,9 +49,13 @@ mod tests {
         // test for vfs_open
         let file = test_vfs_open("/test_file", FileMode::O_RDWR);
         assert!(file.is_ok());
+        let file_2 = test_vfs_open("/test_file_2", FileMode::O_RDWR);
+        assert!(file_2.is_ok());
 
         // test for vfs_close
         assert_eq!(test_vfs_close(&mut file.unwrap()), Ok(()));
+        assert_eq!(test_vfs_close(&mut file_2.unwrap()), Ok(()));
+
         // test for vfs_unlink
         assert_eq!(test_vfs_unlink("/"), Err(Error::new(EINVAL)));
         assert_eq!(test_vfs_unlink("/abc"), Err(Error::new(ENOTEMPTY)));

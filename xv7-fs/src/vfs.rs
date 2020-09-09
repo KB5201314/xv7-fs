@@ -255,6 +255,7 @@ impl RegisteredFS {
                 for i in 0..self.opened_files.len() {
                     if ptr::eq(file.as_ref(), self.opened_files.get(i).unwrap().as_ref()) {
                         self.opened_files.remove(i);
+                        break;
                     }
                 }
             }
