@@ -9,6 +9,7 @@ use derive_new::new;
 use spin::Mutex;
 use spin::RwLock;
 use usyscall::error::*;
+use usyscall::fs::*;
 use Option::*;
 
 #[derive(new)]

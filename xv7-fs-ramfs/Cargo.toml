@@ -13,8 +13,7 @@ spin = "0.5.2"
 zeroize = "1.1.0"
 x86_64 = "0.11.0"
 bitflags = "1.2.1"
-usyscall = { git = "https://github.com/imtsuki/xv7", package = "xv7-usyscall" }
+usyscall = { git = "https://github.com/imtsuki/xv7", package = "xv7-usyscall", branch = "imlk-dev" }
 derive-new = { version = "0.5.8", default-features = false }
-derive_more = "0.99.7"
 xv7-fs = {path = "../xv7-fs", package = "xv7-fs" }
 

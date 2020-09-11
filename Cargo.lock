@@ -51,9 +51,9 @@ dependencies = [
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.20"
+version = "1.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "175c513d55719db99da20232b06cda8bab6b83ec2d04e3283edf0213c37c1a29"
+checksum = "36e28516df94f3dd551a587da5357459d9b36d945a7c37c3557928c1c2ff2a2c"
 dependencies = [
  "unicode-xid",
 ]
@@ -119,9 +119,9 @@ dependencies = [
 
 [[package]]
 name = "x86_64"
-version = "0.11.5"
+version = "0.11.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7c6e9604d08cf91ba0e5cc2175e8cbbdeeb2b8230b818fd9052604c4c5ffd620"
+checksum = "aa580d2cf2a6a8c55f6283d6d06271b1ccab4d93cb3741edab290d5408d848c4"
 dependencies = [
  "bit_field",
  "bitflags",
@@ -148,7 +148,6 @@ version = "0.1.0"
 dependencies = [
  "bitflags",
  "derive-new",
- "derive_more",
  "lazy_static",
  "spin",
  "vte",
@@ -161,7 +160,10 @@ dependencies = [
 [[package]]
 name = "xv7-usyscall"
 version = "0.1.0"
-source = "git+https://github.com/imtsuki/xv7#d38cb191ab05681b492ac578f3973ffd887bf091"
+source = "git+https://github.com/imtsuki/xv7?branch=imlk-dev#2fcd94015d484e7b2e78f638b4e6daf348b02775"
+dependencies = [
+ "bitflags",
+]
 
 [[package]]
 name = "zeroize"

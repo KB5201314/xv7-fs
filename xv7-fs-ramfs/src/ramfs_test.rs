@@ -4,8 +4,8 @@ mod tests {
     use lazy_static::lazy_static;
     use spin::Mutex;
     use usyscall::error::*;
+    use usyscall::fs::*;
     use xv7_fs::vfs::*;
-
     lazy_static! {
         pub static ref REGISTERED_FS: Mutex<RegisteredFS> = Mutex::new(RegisteredFS::new());
     }
