@@ -107,28 +107,27 @@ mod tests {
         assert_eq!(test_vfs_stat("/test_file_rw", &mut stat), Ok(()));
 
         // test for vfs_readdir
-        let mut dir = Direntory::default();
+        let mut dirs = vec![Direntory::default(); 3];
         assert_eq!(test_vfs_mkdir("/test_vfs_readdir"), Ok(()));
         assert_eq!(test_vfs_mkdir("/test_vfs_readdir/test_dir"), Ok(()));
         assert_eq!(test_vfs_mkdir("/test_vfs_readdir/test_dir2"), Ok(()));
         let file = test_vfs_open("/test_vfs_readdir", FileMode::O_RDWR);
         assert!(file.is_ok());
         let file = file.unwrap();
-        assert_eq!(test_vfs_readdir(&file, &mut dir), Ok(1));
-        assert_eq!(&dir.name[0..dir.name_len], "test_dir".as_bytes());
+        assert_eq!(test_vfs_readdir(&file, &mut dirs), Ok(2));
+        assert_eq!(&dirs[0].name[0..dirs[0].name_len], "test_dir".as_bytes());
         assert_eq!(
             test_vfs_stat("/test_vfs_readdir/test_dir", &mut stat),
             Ok(())
         );
-        assert_eq!(dir.ino, stat.ino);
-        assert_eq!(test_vfs_readdir(&file, &mut dir), Ok(1));
-        assert_eq!(&dir.name[0..dir.name_len], "test_dir2".as_bytes());
+        assert_eq!(dirs[0].ino, stat.ino);
+        assert_eq!(&dirs[1].name[0..dirs[1].name_len], "test_dir2".as_bytes());
         assert_eq!(
             test_vfs_stat("/test_vfs_readdir/test_dir2", &mut stat),
             Ok(())
         );
-        assert_eq!(dir.ino, stat.ino);
-        assert_eq!(test_vfs_readdir(&file, &mut dir), Ok(0));
+        assert_eq!(dirs[1].ino, stat.ino);
+        assert_eq!(test_vfs_readdir(&file, &mut dirs), Ok(0));
         assert_eq!(test_vfs_close(&file), Ok(()));
     }
 
@@ -187,21 +186,14 @@ mod tests {
         Ok(ret)
     }
 
-    fn test_vfs_readdir(file: &FileRef, dir: *mut Direntory) -> Result<usize> {
-        let ret = REGISTERED_FS
-            .lock()
-            .vfs_readdir(file, unsafe { &mut *dir })?;
-        println!(
-            "[vfs_readdir ({} {:?})] ret: {}",
-            *file.read(),
-            unsafe { &*dir },
-            ret
-        );
+    fn test_vfs_readdir(file: &FileRef, dirs: &mut [Direntory]) -> Result<usize> {
+        let ret = REGISTERED_FS.lock().vfs_readdir(file, dirs)?;
+        println!("[vfs_readdir ({} {:?})] ret: {}", *file.read(), dirs, ret);
         Ok(ret)
     }
-    fn test_vfs_stat(path: &str, stat: *mut Stat) -> Result<()> {
-        REGISTERED_FS.lock().vfs_stat(path, unsafe { &mut *stat })?;
-        println!("[vfs_stat ({} {:?})]", path, unsafe { &*stat });
+    fn test_vfs_stat(path: &str, stat: &mut Stat) -> Result<()> {
+        REGISTERED_FS.lock().vfs_stat(path, stat)?;
+        println!("[vfs_stat ({} {:?})]", path, stat);
         Ok(())
     }
 }

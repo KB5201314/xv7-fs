@@ -305,7 +305,7 @@ impl INode for RamFSINodeLocked {
         Ok(len)
     }
 
-    fn readdir(&self, file: &FileRef, dir: &mut Direntory) -> Result<usize> {
+    fn readdir(&self, file: &FileRef, dirs: &mut [Direntory]) -> Result<usize> {
         let fs = self.get_fs_special();
         let fsr = fs.0.write();
         let node_data = fsr
@@ -315,15 +315,23 @@ impl INode for RamFSINodeLocked {
         if file.read().pos >= node_data.children_ino.len() {
             return Ok(0usize);
         }
-        let pos = file.read().pos;
-        let entity = node_data.children_ino.iter().skip(pos).next().unwrap();
-        (*dir).ino = *entity.1;
-        (*dir).off = pos;
-        (*dir).name_len = entity.0.len();
-        (*dir).name[0..entity.0.len()].clone_from_slice(entity.0.as_bytes());
-        (*dir).name[entity.0.len()] = 0;
-        file.write().pos += 1;
-        Ok(1)
+        let mut entity = node_data.children_ino.iter().skip(file.read().pos);
+        let mut count = 0;
+        for i in 0..dirs.len() {
+            match entity.next() {
+                None => break,
+                Some(next) => {
+                    dirs[i].ino = *next.1;
+                    dirs[i].off = file.read().pos;
+                    dirs[i].name_len = next.0.len();
+                    dirs[i].name[0..next.0.len()].clone_from_slice(next.0.as_bytes());
+                    dirs[i].name[next.0.len()] = 0;
+                    file.write().pos += 1;
+                    count += 1;
+                }
+            };
+        }
+        Ok(count)
     }
 
     fn getattr(&self, _dentry: &DentryRef, stat: &mut Stat) -> Result<()> {

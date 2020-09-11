@@ -301,7 +301,7 @@ impl RegisteredFS {
         inode.read(file, buf)
     }
 
-    pub fn vfs_readdir(&mut self, file: &FileRef, dir: &mut Direntory) -> Result<usize> {
+    pub fn vfs_readdir(&mut self, file: &FileRef, dirs: &mut[Direntory]) -> Result<usize> {
         // TODO: check dir pointer is safe to write
         /* check read */
         {
@@ -315,7 +315,7 @@ impl RegisteredFS {
             }
         }
         let inode = file.read().inode.clone();
-        inode.readdir(file, dir)
+        inode.readdir(file, dirs)
     }
     pub fn vfs_stat(&mut self, path: &str, stat: &mut Stat) -> Result<()> {
         let nd = self.path_lookup(path, LookupFlag::empty())?;
@@ -467,7 +467,7 @@ pub trait INode: Sync + Send {
     // int (*read) (struct inode *, struct file *, char *, int);
     // int (*write) (struct inode *, struct file *, const char *, int);
     fn readdir_inodes(&self, dentry: &DentryRef) -> Result<BTreeMap<String, usize>>;
-    fn readdir(&self, file: &FileRef, dir: &mut Direntory) -> Result<usize>;
+    fn readdir(&self, file: &FileRef, dirs: &mut[Direntory]) -> Result<usize>;
     // int (*readdir) (struct inode *, struct file *, void *, filldir_t);
     // int (*select) (struct inode *, struct file *, int, select_table *);
     // int (*ioctl) (struct inode *, struct file *, unsigned int, unsigned long);
