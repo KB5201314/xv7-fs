@@ -243,25 +243,19 @@ impl RegisteredFS {
                 return Err(Error::new(ENOTDIR));
             }
         }
-        let file = Arc::new(RwLock::new(File::new(path.to_string(), 0, 1, inode, mode)));
+        let file = Arc::new(RwLock::new(File::new(path.to_string(), 0, 0, inode, mode)));
         self.opened_files.push(file.clone());
         return Ok(file);
     }
 
     pub fn vfs_close(&mut self, file: &FileRef) -> Result<()> {
-        {
-            let mut fw = file.write();
-            fw.ref_count -= 1;
-            if fw.ref_count == 0 {
-                for i in 0..self.opened_files.len() {
-                    if ptr::eq(file.as_ref(), self.opened_files.get(i).unwrap().as_ref()) {
-                        self.opened_files.remove(i);
-                        break;
-                    }
-                }
+        for i in 0..self.opened_files.len() {
+            if ptr::eq(file.as_ref(), self.opened_files.get(i).unwrap().as_ref()) {
+                self.opened_files.remove(i);
+                break;
             }
         }
-        return Ok(());
+        Ok(())
     }
 
     pub fn vfs_write(&mut self, file: &FileRef, buf: &[u8]) -> Result<usize> {
@@ -301,7 +295,7 @@ impl RegisteredFS {
         inode.read(file, buf)
     }
 
-    pub fn vfs_readdir(&mut self, file: &FileRef, dirs: &mut[Direntory]) -> Result<usize> {
+    pub fn vfs_readdir(&mut self, file: &FileRef, dirs: &mut [Direntory]) -> Result<usize> {
         // TODO: check dir pointer is safe to write
         /* check read */
         {
@@ -467,7 +461,7 @@ pub trait INode: Sync + Send {
     // int (*read) (struct inode *, struct file *, char *, int);
     // int (*write) (struct inode *, struct file *, const char *, int);
     fn readdir_inodes(&self, dentry: &DentryRef) -> Result<BTreeMap<String, usize>>;
-    fn readdir(&self, file: &FileRef, dirs: &mut[Direntory]) -> Result<usize>;
+    fn readdir(&self, file: &FileRef, dirs: &mut [Direntory]) -> Result<usize>;
     // int (*readdir) (struct inode *, struct file *, void *, filldir_t);
     // int (*select) (struct inode *, struct file *, int, select_table *);
     // int (*ioctl) (struct inode *, struct file *, unsigned int, unsigned long);
